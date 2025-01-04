@@ -44,7 +44,7 @@ interface BasicStats {
   videosPerDay: number;
   firstVideo: string;
   lastVideo: string;
-  peakHours: number[];
+  peakHours: { hour: string; count: number }[];
   mostActiveYear: string;
   shortVideos: number;
   streamVideos: number;
@@ -113,6 +113,14 @@ const COLORS = [
 
 const CHANNELS_PER_PAGE = 50; // Show 50 channels per page
 
+// Format peak hours for display
+const formatHour = (hour: number | string) => {
+  const hourNum = typeof hour === "string" ? parseInt(hour) : hour;
+  const ampm = hourNum >= 12 ? "PM" : "AM";
+  const hour12 = hourNum % 12 || 12;
+  return `${hour12}${ampm}`;
+};
+
 const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [channelStats, setChannelStats] = useState<Record<string, ChannelDetails>>({});
@@ -164,12 +172,14 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
     );
 
     // Calculate watch time statistics
-    const watchTimeByMonth = Object.entries(watchData.reduce((acc: Record<string, number>, video) => {
-      const date = new Date(video.time);
-      const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      acc[monthYear] = (acc[monthYear] || 0) + estimateWatchTime(video.title);
-      return acc;
-    }, {}))
+    const watchTimeByMonth = Object.entries(
+      watchData.reduce((acc: Record<string, number>, video) => {
+        const date = new Date(video.time);
+        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        acc[monthYear] = (acc[monthYear] || 0) + estimateWatchTime(video.title);
+        return acc;
+      }, {})
+    )
       .map(([month, minutes]) => ({
         month,
         hours: Math.round(minutes / 60),
@@ -179,30 +189,40 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
     const peakWatchMonth = [...watchTimeByMonth].sort((a, b) => b.hours - a.hours)[0];
 
     // Calculate watch time by day of week
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const watchTimeByDayOfWeek = daysOfWeek.map(day => {
+    const daysOfWeek = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const watchTimeByDayOfWeek = daysOfWeek.map((day) => {
       const minutes = watchData
-        .filter(video => daysOfWeek[new Date(video.time).getDay()] === day)
+        .filter((video) => daysOfWeek[new Date(video.time).getDay()] === day)
         .reduce((acc, video) => acc + estimateWatchTime(video.title), 0);
       return { day, hours: Math.round(minutes / 60) };
     });
 
     // Calculate weekend vs weekday hours
     const weekdayHours = watchTimeByDayOfWeek
-      .filter(({ day }) => !['Sunday', 'Saturday'].includes(day))
+      .filter(({ day }) => !["Sunday", "Saturday"].includes(day))
       .reduce((acc, { hours }) => acc + hours, 0);
     const weekendHours = watchTimeByDayOfWeek
-      .filter(({ day }) => ['Sunday', 'Saturday'].includes(day))
+      .filter(({ day }) => ["Sunday", "Saturday"].includes(day))
       .reduce((acc, { hours }) => acc + hours, 0);
 
     // Calculate watch streak
-    const watchDates = [...new Set(watchData.map(v => new Date(v.time).toDateString()))].sort();
+    const watchDates = [...new Set(watchData.map((v) => new Date(v.time).toDateString()))].sort();
     let maxStreak = 1;
     let currentStreak = 1;
     for (let i = 1; i < watchDates.length; i++) {
       const prevDate = new Date(watchDates[i - 1]);
       const currDate = new Date(watchDates[i]);
-      const diffDays = Math.floor((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+      const diffDays = Math.floor(
+        (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
       if (diffDays === 1) {
         currentStreak++;
         maxStreak = Math.max(maxStreak, currentStreak);
@@ -216,24 +236,44 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
       totalHours: Math.round(estimatedMinutes / 60),
       totalDays: Math.round(estimatedMinutes / 1440),
       averageMinutesPerDay: Math.round(estimatedMinutes / totalDays),
-      shortFormPercentage: Math.round((watchData.filter(v => 
-        v.title.toLowerCase().includes("short") || 
-        v.title.toLowerCase().includes("#shorts") ||
-        v.titleUrl.toLowerCase().includes("/shorts/")
-      ).length / totalVideos) * 100),
-      longFormPercentage: Math.round(((watchData.filter(v => 
-        v.title.toLowerCase().includes("stream") || 
-        v.title.toLowerCase().includes("live") ||
-        v.title.toLowerCase().includes("[live]") ||
-        v.title.toLowerCase().includes("🔴")
-      ).length + watchData.filter(v => !v.title.toLowerCase().includes("short") && !v.title.toLowerCase().includes("stream") && !v.title.toLowerCase().includes("live") && !v.title.toLowerCase().includes("[live]") && !v.title.toLowerCase().includes("🔴")).length) / totalVideos) * 100),
+      shortFormPercentage: Math.round(
+        (watchData.filter(
+          (v) =>
+            v.title.toLowerCase().includes("short") ||
+            v.title.toLowerCase().includes("#shorts") ||
+            v.titleUrl.toLowerCase().includes("/shorts/")
+        ).length /
+          totalVideos) *
+          100
+      ),
+      longFormPercentage: Math.round(
+        ((watchData.filter(
+          (v) =>
+            v.title.toLowerCase().includes("stream") ||
+            v.title.toLowerCase().includes("live") ||
+            v.title.toLowerCase().includes("[live]") ||
+            v.title.toLowerCase().includes("🔴")
+        ).length +
+          watchData.filter(
+            (v) =>
+              !v.title.toLowerCase().includes("short") &&
+              !v.title.toLowerCase().includes("stream") &&
+              !v.title.toLowerCase().includes("live") &&
+              !v.title.toLowerCase().includes("[live]") &&
+              !v.title.toLowerCase().includes("🔴")
+          ).length) /
+          totalVideos) *
+          100
+      ),
       peakWatchMonth: peakWatchMonth.month,
       peakWatchHours: peakWatchMonth.hours,
-      monthlyAverageHours: Math.round(watchTimeByMonth.reduce((acc, { hours }) => acc + hours, 0) / watchTimeByMonth.length),
+      monthlyAverageHours: Math.round(
+        watchTimeByMonth.reduce((acc, { hours }) => acc + hours, 0) / watchTimeByMonth.length
+      ),
       weekdayHours,
       weekendHours,
       longestWatchStreak: maxStreak,
-      estimatedSavedTime: Math.round(estimatedMinutes * 0.5 / 60), // Assuming average 2x speed
+      estimatedSavedTime: Math.round((estimatedMinutes * 0.5) / 60), // Assuming average 2x speed
       watchTimeByMonth,
       watchTimeByDayOfWeek,
     };
@@ -303,7 +343,7 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
     const domainCounts = watchData.reduce((acc: Record<string, number>, video) => {
       try {
         const url = new URL(video.titleUrl);
-        const domain = url.hostname.replace('www.', '');
+        const domain = url.hostname.replace("www.", "");
         acc[domain] = (acc[domain] || 0) + 1;
       } catch (e) {
         // Skip invalid URLs
@@ -316,20 +356,31 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
       .sort((a, b) => b.count - a.count);
 
     // Calculate video length distribution
-    const shortVideos = watchData.filter(v => 
-      v.title.toLowerCase().includes("short") || 
-      v.title.toLowerCase().includes("#shorts") ||
-      v.titleUrl.toLowerCase().includes("/shorts/")
+    const shortVideos = watchData.filter(
+      (v) =>
+        v.title.toLowerCase().includes("short") ||
+        v.title.toLowerCase().includes("#shorts") ||
+        v.titleUrl.toLowerCase().includes("/shorts/")
     ).length;
-    
-    const streamVideos = watchData.filter(v => 
-      v.title.toLowerCase().includes("stream") || 
-      v.title.toLowerCase().includes("live") ||
-      v.title.toLowerCase().includes("[live]") ||
-      v.title.toLowerCase().includes("🔴")
+
+    const streamVideos = watchData.filter(
+      (v) =>
+        v.title.toLowerCase().includes("stream") ||
+        v.title.toLowerCase().includes("live") ||
+        v.title.toLowerCase().includes("[live]") ||
+        v.title.toLowerCase().includes("🔴")
     ).length;
 
     const regularVideos = totalVideos - shortVideos - streamVideos;
+
+    // Calculate peak hours properly
+    const peakHours = Object.entries(hourlyDistribution)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([hour]) => ({
+        hour: hour.toString(),
+        count: parseInt(hourlyDistribution[parseInt(hour)].toString()),
+      }));
 
     // Calculate basic stats
     const basicStats: BasicStats = {
@@ -340,12 +391,12 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
       videosPerDay: Math.round(watchData.length / totalDays),
       firstVideo: watchData[watchData.length - 1].title,
       lastVideo: watchData[0].title,
-      peakHours: Array.from({ length: 24 }, (_, i) => hourlyDistribution[i] || 0),
+      peakHours,
       mostActiveYear: Object.entries(yearlyDistribution).sort(([, a], [, b]) => b - a)[0][0],
       shortVideos,
       streamVideos,
-      mostWatchedDomain: domainStats[0]?.name || 'youtube.com',
-      domainStats: domainStats.slice(0, 5)
+      mostWatchedDomain: domainStats[0]?.name || "youtube.com",
+      domainStats: domainStats.slice(0, 5),
     };
 
     return {
@@ -376,7 +427,7 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
   // Load more channels when page changes
   useEffect(() => {
     if (!stats) return;
-    
+
     setLoading(true);
     // Simulate loading delay
     setTimeout(() => {
@@ -480,7 +531,8 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                       </div>
                       <p className="text-sm text-gray-500">Most Active Year</p>
                       <p className="text-xs text-gray-400">
-                        Peak hours: {stats.basicStats.peakHours.map((h) => `${h}:00`).join(", ")}
+                        Peak hours:{" "}
+                        {stats.basicStats.peakHours.map(({ hour }) => formatHour(hour)).join(", ")}
                       </p>
                     </div>
                   </CardContent>
@@ -531,7 +583,13 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                       <PieChart>
                         <Pie
                           data={[
-                            { name: "Regular Videos", value: stats.basicStats.totalVideos - stats.basicStats.shortVideos - stats.basicStats.streamVideos },
+                            {
+                              name: "Regular Videos",
+                              value:
+                                stats.basicStats.totalVideos -
+                                stats.basicStats.shortVideos -
+                                stats.basicStats.streamVideos,
+                            },
                             { name: "Shorts", value: stats.basicStats.shortVideos },
                             { name: "Streams", value: stats.basicStats.streamVideos },
                           ]}
@@ -545,7 +603,13 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         >
                           {[
-                            { name: "Regular Videos", value: stats.basicStats.totalVideos - stats.basicStats.shortVideos - stats.basicStats.streamVideos },
+                            {
+                              name: "Regular Videos",
+                              value:
+                                stats.basicStats.totalVideos -
+                                stats.basicStats.shortVideos -
+                                stats.basicStats.streamVideos,
+                            },
                             { name: "Shorts", value: stats.basicStats.shortVideos },
                             { name: "Streams", value: stats.basicStats.streamVideos },
                           ].map((entry, index) => (
@@ -603,7 +667,9 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                       <div className="space-y-2">
                         <p className="text-sm">
                           <span className="text-gray-500">Total Hours:</span>{" "}
-                          <span className="font-medium">{stats.watchTimeStats.totalHours.toLocaleString()}</span>
+                          <span className="font-medium">
+                            {stats.watchTimeStats.totalHours.toLocaleString()}
+                          </span>
                         </p>
                         <p className="text-sm">
                           <span className="text-gray-500">Days Equivalent:</span>{" "}
@@ -611,7 +677,9 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                         </p>
                         <p className="text-sm">
                           <span className="text-gray-500">Daily Average:</span>{" "}
-                          <span className="font-medium">{Math.round(stats.watchTimeStats.averageMinutesPerDay)} minutes</span>
+                          <span className="font-medium">
+                            {Math.round(stats.watchTimeStats.averageMinutesPerDay)} minutes
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -629,7 +697,9 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                         </p>
                         <p className="text-sm">
                           <span className="text-gray-500">Monthly Average:</span>{" "}
-                          <span className="font-medium">{stats.watchTimeStats.monthlyAverageHours} hours</span>
+                          <span className="font-medium">
+                            {stats.watchTimeStats.monthlyAverageHours} hours
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -647,7 +717,9 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                         </p>
                         <p className="text-sm">
                           <span className="text-gray-500">Longest Streak:</span>{" "}
-                          <span className="font-medium">{stats.watchTimeStats.longestWatchStreak} days</span>
+                          <span className="font-medium">
+                            {stats.watchTimeStats.longestWatchStreak} days
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -657,15 +729,21 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                       <div className="space-y-2">
                         <p className="text-sm">
                           <span className="text-gray-500">Short Form:</span>{" "}
-                          <span className="font-medium">{stats.watchTimeStats.shortFormPercentage}%</span>
+                          <span className="font-medium">
+                            {stats.watchTimeStats.shortFormPercentage}%
+                          </span>
                         </p>
                         <p className="text-sm">
                           <span className="text-gray-500">Long Form:</span>{" "}
-                          <span className="font-medium">{stats.watchTimeStats.longFormPercentage}%</span>
+                          <span className="font-medium">
+                            {stats.watchTimeStats.longFormPercentage}%
+                          </span>
                         </p>
                         <p className="text-sm">
                           <span className="text-gray-500">Time Saved (2x):</span>{" "}
-                          <span className="font-medium">{stats.watchTimeStats.estimatedSavedTime} hours</span>
+                          <span className="font-medium">
+                            {stats.watchTimeStats.estimatedSavedTime} hours
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -710,10 +788,7 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea 
-                    className="h-[600px] overflow-hidden" 
-                    onScrollCapture={handleScroll}
-                  >
+                  <ScrollArea className="h-[600px] overflow-hidden" onScrollCapture={handleScroll}>
                     <div className="pr-4">
                       <table className="w-full">
                         <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
@@ -776,6 +851,49 @@ const YouTubeAnalyzer: React.FC<YouTubeAnalyzerProps> = () => {
                       )}
                     </div>
                   </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* Hourly Activity Pattern */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Hourly Activity Pattern</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-500">
+                      Peak hours:{" "}
+                      {stats.basicStats.peakHours.map(({ hour }) => formatHour(hour)).join(", ")}
+                    </p>
+                  </div>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={Array.from({ length: 24 }, (_, hour) => ({
+                          hour: formatHour(hour),
+                          videos: stats.hourlyData[hour].videos,
+                        }))}
+                      >
+                        <XAxis dataKey="hour" interval={1} tick={{ fontSize: 12 }} height={40} />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="videos" fill="#4f46e5" name="Videos Watched">
+                          {Array.from({ length: 24 }, (_, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={
+                                stats.basicStats.peakHours.some(
+                                  ({ hour }) => hour === index.toString()
+                                )
+                                  ? "#818cf8"
+                                  : "#4f46e5"
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </CardContent>
               </Card>
 
